@@ -1,0 +1,265 @@
+# Clash Verge Rev / Mihomo 完整客户端订阅与分流配置模板
+# 使用前请替换:
+# 1. <SERVER_IP> 替换为服务器公网 IP
+# 2. <PASSWORD> 替换为服务端的连接密码
+
+mixed-port: 7890
+allow-lan: false
+mode: rule
+log-level: warning
+# 严格禁用 IPv6，避免双栈下通过国内运营商公网 IPv6 真实直连导致位置泄露
+ipv6: false
+unified-delay: true
+external-controller: 127.0.0.1:9097
+
+dns:
+  enable: true
+  listen: 0.0.0.0:1053
+  ipv6: false
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  fake-ip-filter:
+    - "+.ts.net"
+    - "+.lan"
+    - "+.local"
+    - "*.arpa"
+    - "time.*.com"
+    - "ntp.*.com"
+    - "+.pool.ntp.org"
+    - "*.msftncsi.com"
+    - "+.msftconnecttest.com"
+    - "localhost.ptlogin2.qq.com"
+  default-nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+  proxy-server-nameserver:
+    - https://doh.pub/dns-query
+    - tls://223.5.5.5
+  nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+  fallback:
+    - https://1.1.1.1/dns-query
+    - https://8.8.8.8/dns-query
+  fallback-filter:
+    geoip: true
+    geoip-code: CN
+  nameserver-policy:
+    "+.ts.net": "100.100.100.100"
+  # 境外 DNS fallback 走代理节点解析，防止受到本地 DNS 污染
+  respect-rules: true
+
+# 流量嗅探（对浏览器 DoH 或直连纯 IP 连接提取 SNI 回挂规则）
+sniffer:
+  enable: true
+  parse-pure-ip: true
+  force-dns-mapping: true
+  sniff:
+    HTTP:
+      ports: [80, 8080]
+    TLS:
+      ports: [443, 8443]
+    QUIC:
+      ports: [443, 8443]
+
+# TUN 模式（Clash Verge Rev 默认通过客户端 UI 打开 TUN）
+tun:
+  enable: false
+  stack: gvisor
+  auto-route: true
+  auto-detect-interface: true
+  dns-hijack:
+    - any:53
+  strict-route: false
+
+proxies:
+  - name: "hy2-node"
+    type: hysteria2
+    server: <SERVER_IP>
+    port: 2443
+    password: "<PASSWORD>"
+    sni: www.bing.com
+    skip-cert-verify: true
+
+proxy-groups:
+  - name: "PROXY"
+    type: select
+    proxies:
+      - "hy2-node"
+      - DIRECT
+
+rule-providers:
+  reject:
+    type: http
+    behavior: domain
+    url: "https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/reject.txt"
+    path: ./ruleset/reject.yaml
+    interval: 86400
+  icloud:
+    type: http
+    behavior: domain
+    url: "https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/icloud.txt"
+    path: ./ruleset/icloud.yaml
+    interval: 86400
+  apple:
+    type: http
+    behavior: domain
+    url: "https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/apple.txt"
+    path: ./ruleset/apple.yaml
+    interval: 86400
+  google:
+    type: http
+    behavior: domain
+    url: "https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/google.txt"
+    path: ./ruleset/google.yaml
+    interval: 86400
+  proxy:
+    type: http
+    behavior: domain
+    url: "https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/proxy.txt"
+    path: ./ruleset/proxy.yaml
+    interval: 86400
+  direct:
+    type: http
+    behavior: domain
+    url: "https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/direct.txt"
+    path: ./ruleset/direct.yaml
+    interval: 86400
+  private:
+    type: http
+    behavior: domain
+    url: "https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/private.txt"
+    path: ./ruleset/private.yaml
+    interval: 86400
+  gfw:
+    type: http
+    behavior: domain
+    url: "https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/gfw.txt"
+    path: ./ruleset/gfw.yaml
+    interval: 86400
+  tld-not-cn:
+    type: http
+    behavior: domain
+    url: "https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/tld-not-cn.txt"
+    path: ./ruleset/tld-not-cn.yaml
+    interval: 86400
+  applications:
+    type: http
+    behavior: classical
+    url: "https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/applications.txt"
+    path: ./ruleset/applications.yaml
+    interval: 86400
+  lancidr:
+    type: http
+    behavior: ipcidr
+    url: "https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/lancidr.txt"
+    path: ./ruleset/lancidr.yaml
+    interval: 86400
+  cncidr:
+    type: http
+    behavior: ipcidr
+    url: "https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/cncidr.txt"
+    path: ./ruleset/cncidr.yaml
+    interval: 86400
+  telegramcidr:
+    type: http
+    behavior: ipcidr
+    url: "https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/telegramcidr.txt"
+    path: ./ruleset/telegramcidr.yaml
+    interval: 86400
+
+rules:
+  # === 1. 直连例外（防回环/内网）===
+  - IP-CIDR,<SERVER_IP>/32,DIRECT,no-resolve
+  - IP-CIDR,100.64.0.0/10,DIRECT,no-resolve
+
+  # === 2. QUIC 回退（阻断 UDP:443 逼退浏览器回退 TCP，防止 AI 站点 HTTP/3 握手卡顿）===
+  - AND,((NETWORK,UDP),(DST-PORT,443)),REJECT
+
+  # === 3. AI 桌面端与 CLI 进程兜底（强行走代理）===
+  - PROCESS-NAME,Claude.exe,PROXY
+  - PROCESS-NAME,Claude Helper.exe,PROXY
+  - PROCESS-NAME,Claude Helper (Renderer).exe,PROXY
+  - PROCESS-NAME,Claude Helper (GPU).exe,PROXY
+  - PROCESS-NAME,claude.exe,PROXY
+  - PROCESS-NAME,Claude,PROXY
+  - PROCESS-NAME,Claude Helper,PROXY
+  - PROCESS-PATH-REGEX,(?i)[\\/]Claude[^\\/]*\.exe$,PROXY
+
+  # === 4. Anthropic / Claude 域名与官方 IP 段 ===
+  - GEOSITE,anthropic,PROXY
+  - DOMAIN-KEYWORD,anthropic,PROXY
+  - DOMAIN-KEYWORD,claude,PROXY
+  - DOMAIN-SUFFIX,anthropic.com,PROXY
+  - DOMAIN-SUFFIX,claude.ai,PROXY
+  - DOMAIN-SUFFIX,claude.com,PROXY
+  - DOMAIN-SUFFIX,claude.dev,PROXY
+  - DOMAIN-SUFFIX,clau.de,PROXY
+  - DOMAIN-SUFFIX,claudemcpclient.com,PROXY
+  - DOMAIN-SUFFIX,claudemcpcontent.com,PROXY
+  - DOMAIN-SUFFIX,claudeusercontent.com,PROXY
+  - DOMAIN-SUFFIX,modelcontextprotocol.io,PROXY
+  - DOMAIN,servd-anthropic-website.b-cdn.net,PROXY
+  - IP-CIDR,160.79.104.0/21,PROXY,no-resolve
+  - IP-CIDR6,2607:6bc0::/32,PROXY,no-resolve
+
+  # === 5. AI 三方依赖（必须在 reject 广告集前放行，否则 statsig 等遥测被拦截导致前端白屏卡死）===
+  - DOMAIN-SUFFIX,auth0.com,PROXY
+  - DOMAIN-SUFFIX,arkoselabs.com,PROXY
+  - DOMAIN-SUFFIX,challenges.cloudflare.com,PROXY
+  - DOMAIN-SUFFIX,cloudflarechallenge.com,PROXY
+  - DOMAIN-SUFFIX,statsig.com,PROXY
+  - DOMAIN-SUFFIX,statsigapi.net,PROXY
+  - DOMAIN-SUFFIX,statsigcdn.com,PROXY
+  - DOMAIN-SUFFIX,featuregates.org,PROXY
+  - DOMAIN-SUFFIX,prodregistryv2.org,PROXY
+  - DOMAIN-SUFFIX,launchdarkly.com,PROXY
+  - DOMAIN-SUFFIX,sentry.io,PROXY
+  - DOMAIN-SUFFIX,datadoghq.com,PROXY
+  - DOMAIN-SUFFIX,datadoghq-browser-agent.com,PROXY
+  - DOMAIN-SUFFIX,usefathom.com,PROXY
+  - DOMAIN-SUFFIX,intercom.io,PROXY
+  - DOMAIN-SUFFIX,intercomcdn.com,PROXY
+  - DOMAIN-SUFFIX,intercomassets.com,PROXY
+  - DOMAIN-SUFFIX,workos.com,PROXY
+  - DOMAIN-SUFFIX,stripe.com,PROXY
+  - DOMAIN-SUFFIX,stripecdn.com,PROXY
+  - DOMAIN-SUFFIX,stripe.network,PROXY
+  - DOMAIN-SUFFIX,a.nel.cloudflare.com,PROXY
+
+  # === 6. 其他主流 AI 站点 ===
+  - DOMAIN-KEYWORD,openai,PROXY
+  - DOMAIN-KEYWORD,chatgpt,PROXY
+  - DOMAIN-SUFFIX,chatgpt.com,PROXY
+  - DOMAIN-SUFFIX,oaistatic.com,PROXY
+  - DOMAIN-SUFFIX,oaiusercontent.com,PROXY
+  - DOMAIN-SUFFIX,sora.com,PROXY
+  - DOMAIN-SUFFIX,perplexity.ai,PROXY
+  - DOMAIN-SUFFIX,pplx.ai,PROXY
+  - DOMAIN-SUFFIX,poe.com,PROXY
+  - DOMAIN-SUFFIX,grok.com,PROXY
+  - DOMAIN-SUFFIX,x.ai,PROXY
+  - DOMAIN-SUFFIX,cursorapi.com,PROXY
+  - DOMAIN-SUFFIX,gemini.google.com,PROXY
+  - DOMAIN-SUFFIX,aistudio.google.com,PROXY
+  - DOMAIN-SUFFIX,ai.google.dev,PROXY
+  - DOMAIN-SUFFIX,deepmind.google,PROXY
+  - DOMAIN-SUFFIX,generativelanguage.googleapis.com,PROXY
+  - DOMAIN-SUFFIX,copilot.microsoft.com,PROXY
+  - DOMAIN-SUFFIX,recraft.ai,PROXY
+
+  # === 7. 白名单分流规则（命中白名单直连，其余一律走 PROXY）===
+  - RULE-SET,applications,DIRECT
+  - RULE-SET,private,DIRECT
+  - RULE-SET,reject,REJECT
+  - RULE-SET,icloud,DIRECT
+  - RULE-SET,apple,DIRECT
+  - RULE-SET,google,PROXY
+  - RULE-SET,proxy,PROXY
+  - RULE-SET,direct,DIRECT
+  - RULE-SET,lancidr,DIRECT,no-resolve
+  - RULE-SET,cncidr,DIRECT,no-resolve
+  - RULE-SET,telegramcidr,PROXY
+  - GEOIP,LAN,DIRECT,no-resolve
+  - GEOIP,CN,DIRECT,no-resolve
+  - MATCH,PROXY

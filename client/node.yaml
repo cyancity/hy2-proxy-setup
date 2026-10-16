@@ -1,0 +1,8 @@
+# Hysteria 2 单节点配置片段（可直接追加至 Clash / Mihomo 的 proxies 列表）
+- name: "hy2-node"
+  type: hysteria2
+  server: <SERVER_IP>
+  port: 2443
+  password: "<PASSWORD>"
+  sni: www.bing.com
+  skip-cert-verify: true
